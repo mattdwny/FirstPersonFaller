@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-[RequireComponent (typeof (DynamicMesh2))]
+[RequireComponent (typeof (DynamicMesh))]
 [RequireComponent (typeof (Rigidbody))]
 public class Platform : MonoBehaviour
 {
@@ -12,9 +12,10 @@ public class Platform : MonoBehaviour
 	MeshRenderer rend;
 	MeshCollider coll;
 	
-	DynamicMesh2 mesh;
+	DynamicMesh mesh;
 	
-	Platform prev, next, below, above;
+	Platform prev, next; //circular doubly linked list of elements
+	Platform below, above; //the literal element that is below/above if set
 
 	Vector3 startPos;
 	
@@ -52,7 +53,7 @@ public class Platform : MonoBehaviour
 		startPos = trans.position;
 		state = PlatformState.STILL;
 
-		mesh = obj.GetComponent<DynamicMesh2>();
+		mesh = obj.GetComponent<DynamicMesh>();
 		rend = obj.GetComponent<MeshRenderer>();
 		coll = obj.GetComponent<MeshCollider>();
 
