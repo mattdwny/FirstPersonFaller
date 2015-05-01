@@ -15,7 +15,7 @@ public class DynamicMesh : MonoBehaviour
 	MeshRenderer rend;
 	MeshCollider coll;
 	
-	Vector3[] s_points = new Vector3[]
+	static Vector3[] s_points = new Vector3[]
 	{
 		new Vector3(-1,-1,-1),
 		new Vector3(-1,-1, 1),
@@ -27,7 +27,7 @@ public class DynamicMesh : MonoBehaviour
 		new Vector3( 1, 1, 1)
 	};
 	
-	Vector2[] uvs = new Vector2[]
+	static Vector2[] uvs = new Vector2[]
 	{
 		new Vector2(0,0),
 		new Vector2(0,1),
@@ -35,21 +35,20 @@ public class DynamicMesh : MonoBehaviour
 		new Vector2(1,0)
 	};
 	
-	public void InitializeBox(float[] pts)
+	public void InitializeBox(float[] pts, Vector3 startLoc)
 	{
 		GameObject obj = gameObject;
 		
-		trans = obj.GetComponent<Transform>(); //trans = this.gameObject.GetComponent<Transform>();
-		
+		trans  = obj.GetComponent<Transform>();
 		filter = obj.GetComponent<MeshFilter>(); 
-		rend = obj.GetComponent<MeshRenderer>();
-		coll = obj.GetComponent<MeshCollider>();
+		rend   = obj.GetComponent<MeshRenderer>();
+		coll   = obj.GetComponent<MeshCollider>();
 		
 		if(filter.mesh == null) filter.mesh = new Mesh();
 		
 		mesh = filter.mesh;
 		
-		CreateBox(pts);
+		CreateBox(pts, startLoc);
 		
 		coll.sharedMesh = mesh;
 		coll.convex = true;
@@ -69,8 +68,10 @@ public class DynamicMesh : MonoBehaviour
 		mesh.RecalculateBounds();
 	}
 	
-	public void CreateBox (float[] pts) // Use this when the mesh should be optimized (static for a long period of time)
+	public void CreateBox (float[] pts, Vector3 startLoc) // Use this when the mesh should be optimized (static for a long period of time)
 	{
+		trans.position = startLoc;
+
 		mesh.Clear();
 		
 		SetVertices(pts);
@@ -82,56 +83,24 @@ public class DynamicMesh : MonoBehaviour
 		mesh.RecalculateBounds();
 		mesh.Optimize();
 	}
-	
-	void SetUVs()
+
+	float OffsetY(float[] pts)
 	{
-		mesh.uv = new Vector2[]
-		{
-			uvs[0],uvs[1],uvs[2],uvs[3],
-			uvs[0],uvs[1],uvs[2],uvs[3],
-			uvs[0],uvs[1],uvs[2],uvs[3],
-			uvs[0],uvs[1],uvs[2],uvs[3],
-			uvs[0],uvs[1],uvs[2],uvs[3],
-			uvs[0],uvs[1],uvs[2],uvs[3]
-		};
+		return (pts[0] + pts[1] + pts[2] + pts[3]) / 4;
 	}
 	
-	void SetVertices(float[] pts)
+	void RecalculateCOM(float[] pts)
 	{
-		//Debug.Log (pts[3]);
+		float displacement = OffsetY(pts);
 		
-		float y = OffsetY(pts);
-		
-		Vector3[] points = new Vector3[]
+		for(int i = 0; i < 24; ++i)
 		{
-			s_points[0] + (pts[2] - y)*Vector3.up,
-			s_points[1] + (pts[0] - y)*Vector3.up,
-			s_points[2] + (pts[2] - y)*Vector3.up,
-			s_points[3] + (pts[0] - y)*Vector3.up,
-			s_points[4] + (pts[3] - y)*Vector3.up,
-			s_points[5] + (pts[1] - y)*Vector3.up,
-			s_points[6] + (pts[3] - y)*Vector3.up,
-			s_points[7] + (pts[1] - y)*Vector3.up
-		};
+			mesh.vertices[i] -= displacement*Vector3.down;
+		}
 		
-		trans.Translate(new Vector3(0f,y,0f));
-		
-		mesh.vertices = new Vector3[]
-		{
-			points[4],points[5],points[1],points[0],
-			
-			points[0],points[2],points[6],points[4],
-			
-			points[4],points[6],points[7],points[5],
-			
-			points[5],points[7],points[3],points[1],
-			
-			points[1],points[3],points[2],points[0],
-			
-			points[2],points[3],points[7],points[6]
-		};
+		trans.position += displacement*Vector3.up;
 	}
-	
+
 	void SetTriangles()
 	{
 		mesh.triangles = new int[]
@@ -156,20 +125,46 @@ public class DynamicMesh : MonoBehaviour
 		};
 	}
 	
-	float OffsetY(float[] pts)
+	void SetUVs()
 	{
-		return (pts[0] + pts[1] + pts[2] + pts[3]) / 4;
+		mesh.uv = new Vector2[]
+		{
+			uvs[0],uvs[1],uvs[2],uvs[3],
+			uvs[0],uvs[1],uvs[2],uvs[3],
+			uvs[0],uvs[1],uvs[2],uvs[3],
+			uvs[0],uvs[1],uvs[2],uvs[3],
+			uvs[0],uvs[1],uvs[2],uvs[3],
+			uvs[0],uvs[1],uvs[2],uvs[3]
+		};
 	}
 	
-	void RecalculateCOM(float[] pts)
-	{
-		float displacement = OffsetY(pts);
-		
-		for(int i = 0; i < 24; ++i)
+	void SetVertices(float[] pts)
+	{	
+		Vector3[] points = new Vector3[]
 		{
-			mesh.vertices[i] -= displacement*Vector3.down;
-		}
+			s_points[0] + pts[2]*Vector3.up,
+			s_points[1] + pts[0]*Vector3.up,
+			s_points[2] + pts[2]*Vector3.up,
+			s_points[3] + pts[0]*Vector3.up,
+			s_points[4] + pts[3]*Vector3.up,
+			s_points[5] + pts[1]*Vector3.up,
+			s_points[6] + pts[3]*Vector3.up,
+			s_points[7] + pts[1]*Vector3.up
+		};
 		
-		trans.position += displacement*Vector3.up;
+		mesh.vertices = new Vector3[]
+		{
+			points[4],points[5],points[1],points[0],
+			
+			points[0],points[2],points[6],points[4],
+			
+			points[4],points[6],points[7],points[5],
+			
+			points[5],points[7],points[3],points[1],
+			
+			points[1],points[3],points[2],points[0],
+			
+			points[2],points[3],points[7],points[6]
+		};
 	}
 }

@@ -2,169 +2,160 @@
 using System.Collections;
 
 [RequireComponent (typeof (DynamicMesh))]
-[RequireComponent (typeof (Rigidbody))]
+[RequireComponent (typeof (Rigidbody))] //is this necessary?
 public class Platform : MonoBehaviour
 {
-	public enum PlatformState { STILL, WAIT, FALLING, INTERP, LATCH, DEAD };
+	//Note: no momentum transfer, that would involve complicated physics, elasticity, and dot product calculations at best
 
-	Transform trans;
+	public enum PlatformState { STILL, WAITING, FALLING, DEAD };
 
+	Transform    trans;
 	MeshRenderer rend;
 	MeshCollider coll;
-	
-	DynamicMesh mesh;
+	DynamicMesh  mesh;
 	
 	Platform prev, next; //circular doubly linked list of elements
-	Platform below, above; //the literal element that is below/above if set
+	Platform below, above; //the literal element that is below/above if set, might be equal to self with one stack platforms
 
-	Vector3 startPos;
+	public float[] startPos;
+	Vector3 startLoc;
 	
-	public float[] pts;
-	public float[] vels;
+	float[] pos;
+	float[] vel;
+	bool[]  lat;
 
-	bool[] locked;
-
-	public float vel;
-	public float time;
-
+	float time;
 	//Time isn't complicated enough; there should be:
 	//lastUpdate (last time box was moved)
 	//waitFor (time of next /operation/state transition/)
 
-	public float respawnTime = 10f;
-	public float grav = 9.8f;
+	public static float waitTime = 5f;
+	public static float respawnTime = 10f;
+	public static float grav = 9.8f;
 	
 	public PlatformState state;
-	
-	int locks;
 
-	// Use this for initialization
-	void Start ()
+	void Start()
 	{
+		pos = (float[]) startPos.Clone();
+		vel = new float[4];
+		lat = new bool[4];
+	
 		GameObject obj = gameObject;
 
-		pts = new float[4];
-		vels = new float[4];
+		trans = obj.GetComponent<Transform>();
+		rend  = obj.GetComponent<MeshRenderer>();
+		coll  = obj.GetComponent<MeshCollider>();
+		mesh  = obj.GetComponent<DynamicMesh>();
 
-		locked = new bool[4];
-		
-		trans = transform; //trans = this.gameObject.GetComponent<Transform>();
-		
-		startPos = trans.position;
+		startLoc = trans.position;
+
+		mesh.InitializeBox(pos, startLoc);
+
 		state = PlatformState.STILL;
 
-		mesh = obj.GetComponent<DynamicMesh>();
-		rend = obj.GetComponent<MeshRenderer>();
-		coll = obj.GetComponent<MeshCollider>();
-
 		RaycastHit hit;
-		RaycastHit hit2;
 
 		//This is a circular doubly linked list structure for the platform data type
-		if(Physics.Raycast(trans.position, Vector3.up, out hit, Mathf.Infinity,(1 << 8)))
-		{
-			prev = hit.collider.gameObject.GetComponent<Platform>();
-		}
-		else
-		{
-			Debug.DrawRay  (trans.position - 1000f*Vector3.up,Vector3.right*100,Color.blue,10f);
-			Physics.Raycast(trans.position - 1000*Vector3.up, Vector3.up, out hit2, Mathf.Infinity, (1 << 8));
-			if(!hit2.collider) Debug.Log ("CRITICAL ERROR");
-			//prev = hit.collider.gameObject.GetComponent<Platform>();
-		}
+		if(!Physics.Raycast(trans.position					   , Vector3.up  , out hit, Mathf.Infinity, (1 << 8)))
+			Physics.Raycast(trans.position - 1000f*Vector3.up  , Vector3.up  , out hit, Mathf.Infinity, (1 << 8));
+			
+		prev = hit.transform.gameObject.GetComponent<Platform>();
 		
-		if(Physics.Raycast(trans.position, Vector3.down, out hit, Mathf.Infinity, (1 << 8)))
-		{
-			next = hit.collider.gameObject.GetComponent<Platform>();
-		}
-		else
-		{
-			Debug.DrawRay(trans.position + 1000f*Vector3.up,Vector3.right*100,Color.red,10f);
-			Physics.Raycast(trans.position + 1000*Vector3.up, Vector3.down, out hit2, Mathf.Infinity, (1 << 8));
-			if(!hit2.collider) Debug.Log ("CRITICAL ERROR");
-			//next = hit.collider.gameObject.GetComponent<Platform>();
-		}
+		if(!Physics.Raycast(trans.position					   , Vector3.down, out hit, Mathf.Infinity, (1 << 8)))
+			Physics.Raycast(trans.position - 1000f*Vector3.down, Vector3.down, out hit, Mathf.Infinity, (1 << 8));
 
-		mesh.InitializeBox(pts);
+		next = hit.transform.gameObject.GetComponent<Platform>();
 	}
 
-	void Update()
+	void FixedUpdate()
 	{
-		if(state == PlatformState.WAIT)
+		if(state == PlatformState.WAITING)
 		{
 			//TODO: shake ground
-			time -= Time.deltaTime;
+			time -= Time.fixedDeltaTime;
 			if(time <= 0f) state = PlatformState.FALLING;
 		}
 		else if(state == PlatformState.FALLING)
 		{
-			vel -= grav*Time.deltaTime/2;
-			trans.Translate(vel*Time.deltaTime*Vector3.up); //http://www.niksula.hut.fi/~hkankaan/Homepages/gravity.html
-			vel -= grav*Time.deltaTime/2;
-
-			Platform lower = Lower();
-
-			if(lower)
+			if(below)
 			{
-				if(MinTimeToCollision(lower) <= 0f)
-				{
-					state = PlatformState.INTERP;
-					below = lower;
-					below.above = this;
-					for(int i = 0; i < 4; ++i)
-					{
-						if(TimeToCollision(lower,i) <= 0f)
-						{
-							++locks;
-							locked[i] = true;
-						}
-					}
-					if(locks == 4) state = PlatformState.LATCH;
-				}
+
 			}
-		}
-		else if(state == PlatformState.INTERP)
-		{
-			for(int i = 0; i < 4; ++i)
+			else
 			{
-				if(locked[i])
-				{
-					this.pts[i] = below.pts[i] + 2f;
-				}
-				else
-				{
-					this.pts[i] -= this.vels[i]*Time.deltaTime;
-					if(TimeToCollision(below, i) <= 0f)
-					{
-						locked[i] = true;
-						this.pts[i] = below.pts[i] + 2f;
-					}
-				}
+
 			}
 
-			//TODO: stuff
-		}
-		else if(state == PlatformState.LATCH)
-		{
-			trans.position = below.transform.position + Vector3.up*2;
+			Fall();
 		}
 		else if(state == PlatformState.DEAD)
 		{
 			if(time < respawnTime/2)
 			{
-				if(Mathf.PingPong(time,1) < .5f) rend.enabled = true;
+				if(Mathf.PingPong(Mathf.Pow (respawnTime - time,2),1) > .5f) rend.enabled = true;
 				else 							 rend.enabled = false;
 			}
 			
-			time -= Time.deltaTime;
+			time -= Time.fixedDeltaTime;
 			
 			if(time <= 0f)
 			{
 				state = PlatformState.STILL;
+				time = waitTime;
+
 				rend.enabled = true;
 				coll.enabled = true;
 			}
 		}
+	}
+
+	void Fall()
+	{
+		//apply half velocity - http://www.niksula.hut.fi/~hkankaan/Homepages/gravity.html
+		for(int i = 0; i < 4; ++i)
+			vel[i] -= grav*Time.fixedDeltaTime/2;
+		
+		//apply position changes
+		for(int i = 0; i < 4; ++i)
+			pos[i] += vel[i]*Time.fixedDeltaTime;
+		
+		bool equal = true;
+		for(int i = 1; i < 4; ++i)
+			if(!Mathf.Approximately(vel[i-1],vel[i])) equal = false;
+
+		//latch platforms together wherever appropriate
+		for(int i = 0; i < 4; ++i)
+		{
+			if(lat[i])
+			{
+				this.pos[i] = below.pos[i];
+				this.vel[i] = below.vel[i];
+			}
+		}
+
+		//uniform velocity means the object is not being skewed, otherwise the box needs to be altered
+		if(equal) trans.Translate(vel[0]*Time.fixedDeltaTime*Vector3.up);
+		else 	  mesh.AlterBox(pos);
+		
+		//apply half velocity
+		for(int i = 0; i < 4; ++i)
+			vel[i] -= grav*Time.fixedDeltaTime/2;
+	}
+
+	void InterpBoxes() //TODO: make
+	{
+		
+	}
+	
+	/**
+	 * @param a is the start elevation
+	 * @param b is the end elevation
+	 * @param c is the fraction of distance travelled from a to b [0,1]
+	 */
+	float Interpolate(float a, float b, float c)
+	{
+		return a + (b-a)*c;
 	}
 
 	Platform Lower()
@@ -184,26 +175,14 @@ public class Platform : MonoBehaviour
 		return temp;
 	}
 
-	float TimeToCollision(Platform other, int i)
+	float MinTimeToCollision(Platform that)
 	{
-		if(other)
-		{
-			float delta = this.pts[i] - other.pts[i];
-			float relVel = this.vels[i] - other.vels[i];
-			
-			return QuadraticEq(delta,relVel);
-		}
-		return -1;
-	}
-
-	float MinTimeToCollision(Platform other)
-	{
-		if(other)
+		if(that)
 		{
 			float minTime = Mathf.Infinity;
 			for(int i = 0; i < 4; ++i)
 			{
-				float curTime = TimeToCollision(other, i);
+				float curTime = TimeToCollision(that, i);
 
 				if(curTime < minTime) minTime = curTime; 
 			}
@@ -216,7 +195,7 @@ public class Platform : MonoBehaviour
 	{
 		float grav = -9.8f;
 
-		//quadratic formula of x = x0 + v0*t + (1/2)*a*t^2
+		//quadratic formula of x = x0 + v0*t + (1/2)*a*t^2 solving for time equation
 		//http://zonalandeducation.com/mstm/physics/mechanics/kinematics/EquationsForAcceleratedMotion/AlgebraRearrangements/Displacement/Image90.gif
 		
 		float discriminant = relVel*relVel + 2*grav*delta;
@@ -225,33 +204,40 @@ public class Platform : MonoBehaviour
 		else return -1;
 	}
 
-	void InterpBoxes() //TODO: make
+	void Respawn()
 	{
+		state = PlatformState.DEAD;
+		time = respawnTime;
 
+		if(above) above.below = null;
+
+		above = null;
+		below = null;
+
+		rend.enabled = false;
+		coll.enabled = false;
+
+		pos = (float[]) startPos.Clone();
+		vel = new float[4];
+		lat = new bool[4];
+
+		mesh.CreateBox(pos,startLoc);
 	}
-
-	/**
-	 * @param a is the start elevation
-	 * @param b is the end elevation
-	 * @param c is the fraction of distance travelled from a to b [0,1]
-	 */
-	float Interpolate(float a, float b, float c)
+	
+	float TimeToCollision(Platform that, int i)
 	{
-		return a + (b-a)*c;
+		if(that)
+		{
+			float delta  = this.pos[i] - that.pos[i];
+			float relVel = this.vel[i] - that.vel[i];
+			
+			return QuadraticEq(delta,relVel);
+		}
+		return -1;
 	}
 
 	void OnTriggerEnter() //Respawning
 	{
-		state = PlatformState.DEAD;
-		if(above) above.state = PlatformState.FALLING;
-		above = null;
-		below = null;
-		time = respawnTime;
-		trans.position = startPos;
-		rend.enabled = false;
-		coll.enabled = false;
-		vel = 0f;
-		locks = 0;
-		
+		Respawn();
 	}
 }
