@@ -6,6 +6,7 @@ using System.Collections;
 public class Platform : MonoBehaviour
 {
 	//Note: no momentum transfer, that would involve complicated physics, elasticity, and dot product calculations at best
+	//if momentum transfer is used, consider int[] weight and mutually exclusive corners
 
 	public enum PlatformState { STILL, WAITING, FALLING, DEAD };
 
@@ -91,11 +92,7 @@ public class Platform : MonoBehaviour
 		}
 		else if(state == PlatformState.DEAD)
 		{
-			if(time < respawnTime/2)
-			{
-				if(Mathf.PingPong(Mathf.Pow (respawnTime - time,2),1) > .5f) rend.enabled = true;
-				else 							 rend.enabled = false;
-			}
+			Flicker();
 			
 			time -= Time.fixedDeltaTime;
 			
@@ -118,36 +115,27 @@ public class Platform : MonoBehaviour
 		
 		//apply position changes
 		for(int i = 0; i < 4; ++i)
-			pos[i] += vel[i]*Time.fixedDeltaTime;
-		
-		bool equal = true;
-		for(int i = 1; i < 4; ++i)
-			if(!Mathf.Approximately(vel[i-1],vel[i])) equal = false;
-
-		//latch platforms together wherever appropriate
-		for(int i = 0; i < 4; ++i)
 		{
-			if(lat[i])
-			{
-				this.pos[i] = below.pos[i];
-				this.vel[i] = below.vel[i];
-			}
+			if(lat[i]) pos[i] = below.pos[i];
+			else 	   pos[i] += vel[i]*Time.fixedDeltaTime;
 		}
 
-		//uniform velocity means the object is not being skewed, otherwise the box needs to be altered
-		if(equal) trans.Translate(vel[0]*Time.fixedDeltaTime*Vector3.up);
-		else 	  mesh.AlterBox(pos);
+		mesh.TransformBox(pos);
 		
 		//apply half velocity
 		for(int i = 0; i < 4; ++i)
 			vel[i] -= grav*Time.fixedDeltaTime/2;
 	}
 
-	void InterpBoxes() //TODO: make
+	void Flicker()
 	{
-		
+		if(time < respawnTime/2)
+		{
+			if(Mathf.PingPong(Mathf.Pow(respawnTime-time-5, 2), 1) < .5f) rend.enabled = true;
+			else 														  rend.enabled = false;
+		}
 	}
-	
+
 	/**
 	 * @param a is the start elevation
 	 * @param b is the end elevation
@@ -160,31 +148,36 @@ public class Platform : MonoBehaviour
 
 	Platform Lower()
 	{
-		Platform temp = this;
-		
-		do
+		if(this == this.next) return null; //if there is only a single element in the DLL
+
+		Platform lower = null;
+		float least = -1;
+
+		for(Platform temp = this.next; temp != this; temp = temp.next)
 		{
-			temp = temp.next;
-			if(temp == this) break; //if there is only a single element in the DLL
 			if(temp.state == PlatformState.DEAD) continue;
-			if(MinTimeToCollision(temp) != -1) break;
-		} while(temp != this); 
 
-		if(temp == this) return null;
+			float curr = MinTimeToCollision(temp); 
+			if((curr != -1) && least == -1 || curr < least)
+			{
+				least = curr;
+				lower = temp;
+			}
+		}
 
-		return temp;
+		return lower;
 	}
 
 	float MinTimeToCollision(Platform that)
 	{
 		if(that)
 		{
-			float minTime = Mathf.Infinity;
+			float minTime = -1;
 			for(int i = 0; i < 4; ++i)
 			{
 				float curTime = TimeToCollision(that, i);
 
-				if(curTime < minTime) minTime = curTime; 
+				if(minTime == -1 || curTime < minTime) minTime = curTime; 
 			}
 			return minTime;
 		}
@@ -196,6 +189,11 @@ public class Platform : MonoBehaviour
 		float grav = -9.8f;
 
 		//quadratic formula of x = x0 + v0*t + (1/2)*a*t^2 solving for time equation
+
+		//-delta + relVel*t + g/2*t*t
+
+		//(b +/- sqrt(b*b - 4ac))/(2*a)
+
 		//http://zonalandeducation.com/mstm/physics/mechanics/kinematics/EquationsForAcceleratedMotion/AlgebraRearrangements/Displacement/Image90.gif
 		
 		float discriminant = relVel*relVel + 2*grav*delta;
@@ -221,7 +219,7 @@ public class Platform : MonoBehaviour
 		vel = new float[4];
 		lat = new bool[4];
 
-		mesh.CreateBox(pos,startLoc);
+		mesh.TransformBox(pos, startLoc);
 	}
 	
 	float TimeToCollision(Platform that, int i)
