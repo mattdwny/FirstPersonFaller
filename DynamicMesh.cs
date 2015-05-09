@@ -118,16 +118,12 @@ public class DynamicMesh : MonoBehaviour
 		
 		for(int i = 0; i < 4; ++i)
 		{
-			if(.001 < Mathf.Abs(dispFromCOM[i] - (pts[i] - com)))
-			{
-				Debug.Log (i);
-				Debug.Log (dispFromCOM[i] + ":" + (pts[i] - com));
-				stillFrameCnt = 0;
-			}
+			if(.001 < Mathf.Abs(dispFromCOM[i] - (pts[i] - com))) stillFrameCnt = 0; //DEBUGGING: should be less than "<"
 		}
 
 		if(stillFrameCnt == 0)
 		{
+			SetPoints(pts);
 			RecalculateCOM(pts);
 			mesh.RecalculateNormals();
 			mesh.RecalculateBounds();
@@ -181,9 +177,10 @@ public class DynamicMesh : MonoBehaviour
 	void SetVertices(float[] pts)
 	{	
 		mPoints = new Vector3[8];
-		mVertices = new Vector3[24];
 
 		SetPoints(pts);
+
+		mVertices = new Vector3[24];
 		
 		mVertices[0] = mPoints[4];
 		mVertices[1] = mPoints[5];
