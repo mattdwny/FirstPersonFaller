@@ -24,14 +24,14 @@ public class DynamicMesh : MonoBehaviour
 
 	static Vector3[] s_points = new Vector3[]
 	{
-		new Vector3(-1,-1,-1),
-		new Vector3(-1,-1, 1),
-		new Vector3(-1, 1,-1),
-		new Vector3(-1, 1, 1),
-		new Vector3( 1,-1,-1),
-		new Vector3( 1,-1, 1),
-		new Vector3( 1, 1,-1),
-		new Vector3( 1, 1, 1)
+		new Vector3(-1f,-.5f,-1f),
+		new Vector3(-1f,-.5f, 1f),
+		new Vector3(-1f, .5f,-1f),
+		new Vector3(-1f, .5f, 1f),
+		new Vector3( 1f,-.5f,-1f),
+		new Vector3( 1f,-.5f, 1f),
+		new Vector3( 1f, .5f,-1f),
+		new Vector3( 1f, .5f, 1f)
 	};
 
 	static int[] triangles = new int[] 

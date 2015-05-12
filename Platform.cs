@@ -14,17 +14,17 @@ public class Platform : MonoBehaviour
 	MeshRenderer rend;
 	MeshCollider coll;
 	DynamicMesh  mesh;
-	
-	Platform prev, next; //circular doubly linked list of elements
-	Platform below, above; //the literal element that is below/above if set, might be equal to self with one stack platforms
+
+	PlatformStackManager 	manager;
+	public Platform 		above, below; //the literal element that is below/above if set
 
 	public float[] startPos;
 	Vector3 startLoc;
 	
-	float[] pos;
+	public float[] pos;
 	float[] vel;
 	bool[]  lat;
-
+	
 	float time;
 	//Time isn't complicated enough; there should be:
 	//lastUpdate (last time box was moved)
@@ -36,41 +36,48 @@ public class Platform : MonoBehaviour
 	
 	public PlatformState state;
 
-	void Start()
+	void Awake()
 	{
 		pos = (float[]) startPos.Clone();
 		vel = new float[4];
 		lat = new bool[4];
-	
+		
 		GameObject obj = gameObject;
-
+		
 		trans = obj.GetComponent<Transform>();
 		rend  = obj.GetComponent<MeshRenderer>();
 		coll  = obj.GetComponent<MeshCollider>();
 		mesh  = obj.GetComponent<DynamicMesh>();
-
-		startLoc = trans.position;
-
-		mesh.InitializeBox(pos, startLoc);
-
-		state = PlatformState.STILL;
-
-		RaycastHit hit;
-
-		//This is a circular doubly linked list structure for the platform data type
-		if(!Physics.Raycast(trans.position					   , Vector3.up  , out hit, Mathf.Infinity, (1 << 8)))
-			Physics.Raycast(trans.position - 1000f*Vector3.up  , Vector3.up  , out hit, Mathf.Infinity, (1 << 8));
-			
-		prev = hit.transform.gameObject.GetComponent<Platform>();
 		
-		if(!Physics.Raycast(trans.position					   , Vector3.down, out hit, Mathf.Infinity, (1 << 8)))
-			Physics.Raycast(trans.position - 1000f*Vector3.down, Vector3.down, out hit, Mathf.Infinity, (1 << 8));
-
-		next = hit.transform.gameObject.GetComponent<Platform>();
+		startLoc = trans.position;
+		
+		mesh.InitializeBox(pos, startLoc);
+		
+		state = PlatformState.STILL;
 	}
 
-	void FixedUpdate()
+	void Start()
 	{
+		RaycastHit hit;
+
+		if(Physics.Raycast(trans.position, Vector3.up, out hit, Mathf.Infinity, (1 << 8)))
+			above = hit.transform.gameObject.GetComponent<Platform>(); //TODO: checks
+
+		if(Physics.Raycast(trans.position, Vector3.down, out hit, Mathf.Infinity, (1 << 8)))
+			below = hit.transform.gameObject.GetComponent<Platform>(); //TODO: checks
+		else
+			Invoke("InitManager",0);
+	}
+
+	public void InitManager()
+	{
+		AddPlatforms(gameObject.AddComponent<PlatformStackManager>());
+	}
+
+	public void Step()
+	{
+
+		//Debug.Log (Time.time);
 		if(state == PlatformState.WAITING)
 		{
 			//TODO: shake ground
@@ -79,7 +86,7 @@ public class Platform : MonoBehaviour
 		}
 		else if(state == PlatformState.FALLING)
 		{
-			if(below)
+			if(lat[0])
 			{
 
 			}
@@ -98,13 +105,20 @@ public class Platform : MonoBehaviour
 			
 			if(time <= 0f)
 			{
-				state = PlatformState.STILL;
-				time = waitTime;
-
-				rend.enabled = true;
-				coll.enabled = true;
+				Spawn();
 			}
 		}
+
+		if(above) above.Step();
+	}
+
+	void AddPlatforms(PlatformStackManager manager)
+	{
+		Debug.Log((below ? below.name : "") + ":" + this.name + ":" + (above ? above.name : ""));
+		this.manager = manager;
+		manager.AddPlatform(this);
+		Debug.Log((below ? below.name : "") + ":" + this.name + ":" + (above ? above.name : ""));
+		if(above) above.AddPlatforms(manager);
 	}
 
 	void Fall()
@@ -144,28 +158,6 @@ public class Platform : MonoBehaviour
 	float Interpolate(float a, float b, float c)
 	{
 		return a + (b-a)*c;
-	}
-
-	Platform Lower()
-	{
-		if(this == this.next) return null; //if there is only a single element in the DLL
-
-		Platform lower = null;
-		float least = -1;
-
-		for(Platform temp = this.next; temp != this; temp = temp.next)
-		{
-			if(temp.state == PlatformState.DEAD) continue;
-
-			float curr = MinTimeToCollision(temp); 
-			if((curr != -1) && least == -1 || curr < least)
-			{
-				least = curr;
-				lower = temp;
-			}
-		}
-
-		return lower;
 	}
 
 	float MinTimeToCollision(Platform that)
@@ -220,6 +212,15 @@ public class Platform : MonoBehaviour
 		lat = new bool[4];
 
 		mesh.TransformBox(pos, startLoc);
+	}
+
+	void Spawn()
+	{
+		state = PlatformState.STILL;
+		time = waitTime;
+		
+		rend.enabled = true;
+		coll.enabled = true;
 	}
 	
 	float TimeToCollision(Platform that, int i)
