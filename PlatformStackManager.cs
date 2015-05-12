@@ -22,15 +22,15 @@ public class PlatformStackManager : MonoBehaviour
 		if(lowest == null) lowest = platform;
 	}
 
-	public bool InsertPlatform(Platform platform, float P0)
+	public bool InsertPlatform(Platform platform)
 	{
 		if(platform == lowest) lowest = platform.above; //make sure we don't lose our handle
 		if(platform.above) platform.above.below = platform.below; //Stitch the above/below together to avoid infinite loops
 		if(platform.below) platform.below.above = platform.above;
 
 		if(lowest == null) lowest = platform;
-		else if(P0 < lowest.pos[0])
-		{	
+		else if(Between(null,platform,lowest))
+		{
 			lowest.below = platform;
 			platform.above = lowest;
 			platform.below = null;
@@ -40,7 +40,7 @@ public class PlatformStackManager : MonoBehaviour
 		{
 			for(Platform temp = lowest; temp != null; temp = temp.above)
 			{
-				if(temp.above == null || Between(temp,P0,temp.above))
+				if(Between(temp,platform,temp.above))
 				{	
 					platform.below = temp;
 					platform.above = temp.above;
@@ -56,10 +56,13 @@ public class PlatformStackManager : MonoBehaviour
 		return true;
 	}
 	
-	private bool Between(Platform low, float mid, Platform top)
+	private bool Between(Platform low, Platform mid, Platform top)
 	{
-		if(low && low.pos[0] + 1f > mid) return false; 
-		if(top && top.pos[0] - 1f < mid) return false;
+		for(int i = 0; i < 4; ++i)
+		{
+			if(low && low.pos[i] + 1f > mid.startPos[i] + mid.startLoc.y) return false; 
+			if(top && top.pos[i] - 1f < mid.startPos[i] + mid.startLoc.y) return false;
+		}
 		return true;
 	}
 

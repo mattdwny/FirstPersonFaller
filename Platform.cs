@@ -19,7 +19,7 @@ public class Platform : MonoBehaviour
 	public Platform 		above, below; //the literal element that is below/above if set
 
 	public float[] startPos;
-	Vector3 startLoc;
+	public Vector3 startLoc;
 	
 	public float[] pos;
 	float[] vel;
@@ -105,7 +105,7 @@ public class Platform : MonoBehaviour
 			
 			if(time <= 0f)
 			{
-				Spawn();
+				if(Spawn()) state = PlatformState.STILL;
 			}
 		}
 
@@ -199,28 +199,36 @@ public class Platform : MonoBehaviour
 		state = PlatformState.DEAD;
 		time = respawnTime;
 
-		if(above) above.below = null;
+		mesh.TransformBox(pos, startLoc);
 
-		above = null;
-		below = null;
+		for(int i = 0; i < 4; ++i)
+			pos[i] = Mathf.NegativeInfinity;
+
+		manager.RemovePlatform(this);
 
 		rend.enabled = false;
 		coll.enabled = false;
-
-		pos = (float[]) startPos.Clone();
-		vel = new float[4];
-		lat = new bool[4];
-
-		mesh.TransformBox(pos, startLoc);
 	}
 
-	void Spawn()
+	bool Spawn()
 	{
-		state = PlatformState.STILL;
-		time = waitTime;
-		
-		rend.enabled = true;
-		coll.enabled = true;
+		if(manager.InsertPlatform(this))
+		{
+			time = waitTime;
+			
+			rend.enabled = true;
+			coll.enabled = true;
+
+			for(int i = 0; i < 4; ++i)
+			{
+				pos[i] = startPos[i];
+				vel[i] = 0;
+				lat[i] = false;
+			}
+
+			return true;
+		}
+		return false;
 	}
 	
 	float TimeToCollision(Platform that, int i)
